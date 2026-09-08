@@ -12,7 +12,17 @@ to an internal key happens inside the implementation and nowhere else (§6.0, §
 
 from abc import ABC, abstractmethod
 
-from boxes3.models import Box, BoxUpdate, NewBox, Page, User
+from boxes3.models import (
+    Box,
+    BoxUpdate,
+    Item,
+    ItemUpdate,
+    NewBox,
+    NewItem,
+    Page,
+    TagCount,
+    User,
+)
 
 
 class UserNotFoundError(Exception): ...
@@ -25,6 +35,9 @@ class BoxNotFoundError(Exception): ...
 
 
 class BoxNumberTakenError(Exception): ...
+
+
+class ItemNotFoundError(Exception): ...
 
 
 class BoxNotEmptyError(Exception):
@@ -88,3 +101,52 @@ class InventoryDatabase(ABC):
     @abstractmethod
     def box_locations(self, username: str) -> list[str]:
         """Distinct non-empty locations already in use, for autocomplete (§6.2)."""
+
+    @abstractmethod
+    def create_item(self, username: str, item: NewItem) -> Item:
+        """Raises `BoxNotFoundError` if `item.box_id` names no box of this user."""
+
+    @abstractmethod
+    def get_item(self, username: str, item_id: str) -> Item: ...
+
+    @abstractmethod
+    def update_item(self, username: str, item_id: str, changes: ItemUpdate) -> Item:
+        """
+        Setting `box_id` moves the item, which is why there is no separate move (§6.3).
+        """
+
+    @abstractmethod
+    def delete_item(self, username: str, item_id: str) -> None:
+        """The item's blobs are deliberately left in place (§7.6)."""
+
+    @abstractmethod
+    def search_items(
+        self,
+        username: str,
+        *,
+        q: str | None = None,
+        tags: list[str] | None = None,
+        box_id: str | None = None,
+        has_image: bool | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> Page[Item]:
+        """
+        Search, per the three rules of §6.3.
+
+        `q` is semantic, not syntactic: it is a free-text query and the server decides
+        what it matches. Callers never build query syntax, so widening what it covers
+        is not a breaking change.
+
+        Results come back in server-defined order and callers must not re-sort. Today
+        that order is `updated_at` descending.
+
+        `tag` is conjunctive: an item must carry every tag given, so a tag that could
+        never have been stored is rejected rather than ignored: dropping it would widen
+        the search instead of correctly matching nothing. Structured filters stay
+        separate from `q` so that adding one later is purely additive.
+        """
+
+    @abstractmethod
+    def list_tags(self, username: str) -> list[TagCount]:
+        """Every tag in use with its count, ordered by count descending (§6.5)."""

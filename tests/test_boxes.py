@@ -1,9 +1,7 @@
 """The box half of the storage layer (§6.2, §7.4)."""
 
 import pytest
-from sqlalchemy import insert
 
-from boxes3.db.engine import create_engine
 from boxes3.db.interface import (
     BoxNotEmptyError,
     BoxNotFoundError,
@@ -12,44 +10,10 @@ from boxes3.db.interface import (
     UsernameTakenError,
     UserNotFoundError,
 )
-from boxes3.db.migrations import upgrade_to_head
 from boxes3.db.schema import item_tags, items
 from boxes3.db.sqlite import SqliteInventoryDatabase
 from boxes3.ids import ALPHABET
-from boxes3.models import Box, BoxUpdate, NewBox
-
-NOW = "2026-09-08T12:00:00Z"
-
-
-@pytest.fixture
-def db(tmp_path):
-    engine = create_engine(tmp_path / "inventory.db")
-    upgrade_to_head(engine)
-    return SqliteInventoryDatabase(engine)
-
-
-@pytest.fixture
-def username(db):
-    db.create_user("brasse", "hash")
-    return "brasse"
-
-
-def put_item(db: SqliteInventoryDatabase, box: Box, title: str) -> int:
-    """Items have no interface yet (step 1.4), so tests put them in directly."""
-    with db.engine.begin() as connection:
-        return connection.execute(
-            insert(items)
-            .values(
-                public_id=title,
-                user_id=box.user_id,
-                box_id=box.id,
-                title=title,
-                created_at=NOW,
-                updated_at=NOW,
-            )
-            .returning(items.c.id)
-        ).scalar_one()
-
+from boxes3.models import BoxUpdate, NewBox, NewItem
 
 # Users
 
@@ -150,8 +114,8 @@ def test_an_unknown_box_raises(db: SqliteInventoryDatabase, username: str):
 
 def test_item_count_is_derived(db: SqliteInventoryDatabase, username: str):
     box = db.create_box(username, NewBox(number=1))
-    put_item(db, box, "drill")
-    put_item(db, box, "saw")
+    db.create_item(username, NewItem(title="drill", box_id=box.public_id))
+    db.create_item(username, NewItem(title="saw", box_id=box.public_id))
 
     assert db.get_box(username, box.public_id).item_count == 2
 
@@ -304,7 +268,7 @@ def test_updating_an_unknown_box_raises(db: SqliteInventoryDatabase, username: s
 
 def test_an_update_keeps_the_item_count(db: SqliteInventoryDatabase, username: str):
     box = db.create_box(username, NewBox(number=1))
-    put_item(db, box, "drill")
+    db.create_item(username, NewItem(title="drill", box_id=box.public_id))
 
     updated = db.update_box(username, box.public_id, BoxUpdate(name="Tools"))
 
@@ -325,8 +289,8 @@ def test_an_empty_box_deletes(db: SqliteInventoryDatabase, username: str):
 
 def test_deleting_a_box_with_items_raises(db: SqliteInventoryDatabase, username: str):
     box = db.create_box(username, NewBox(number=1))
-    put_item(db, box, "drill")
-    put_item(db, box, "saw")
+    db.create_item(username, NewItem(title="drill", box_id=box.public_id))
+    db.create_item(username, NewItem(title="saw", box_id=box.public_id))
 
     with pytest.raises(BoxNotEmptyError) as raised:
         db.delete_box(username, box.public_id)
@@ -339,9 +303,9 @@ def test_a_forced_delete_takes_the_items_and_their_tags(
     db: SqliteInventoryDatabase, username: str
 ):
     box = db.create_box(username, NewBox(number=1))
-    item_id = put_item(db, box, "drill")
-    with db.engine.begin() as connection:
-        connection.execute(insert(item_tags).values(item_id=item_id, tag="tools"))
+    db.create_item(
+        username, NewItem(title="drill", box_id=box.public_id, tags=["tools"])
+    )
 
     db.delete_box(username, box.public_id, force=True)
 
@@ -355,8 +319,8 @@ def test_a_forced_delete_leaves_other_boxes_alone(
 ):
     doomed = db.create_box(username, NewBox(number=1))
     keeper = db.create_box(username, NewBox(number=2))
-    put_item(db, doomed, "drill")
-    put_item(db, keeper, "saw")
+    db.create_item(username, NewItem(title="drill", box_id=doomed.public_id))
+    db.create_item(username, NewItem(title="saw", box_id=keeper.public_id))
 
     db.delete_box(username, doomed.public_id, force=True)
 
