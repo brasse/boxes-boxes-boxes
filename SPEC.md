@@ -956,13 +956,13 @@ at compile time rather than at the cupboard.
 | Add item | Title, box picker (searchable), tags with autocomplete, photo taken inline. **The long-term everyday flow**, see below. | phone |
 | **Pack a box** | Keyboard-driven repeat entry into one box. See below. | laptop |
 | **Photo pass** | Queue of photo-less items in a box; shoot and auto-advance. See below. | phone |
-| Box list | All boxes with number, name, location, item count. | both |
+| Box list | Every box, with number, name, location, item count. Searched and paginated server-side (§6.2), not held in one response. | both |
 | Box detail | Box metadata plus its items. Edit, delete. | both |
 | Add/edit box | Number (pre-filled from `next-number`), name, description, location with autocomplete. | laptop |
 
 ### Requirements
 
-- Search input debounced ~250 ms; results must not reorder while typing.
+- Item search input debounced ~250 ms; results must not reorder while typing.
 - Photo capture uses `<input type="file" accept="image/*" capture="environment">` so the
   phone offers the camera directly.
 - **No client-side downscaling.** The original file is uploaded untouched, because it is
@@ -1124,6 +1124,23 @@ Consequently it must be complete on the phone in a single pass: the photo is tak
 rather than deferred to the photo pass, since there is no bulk session to sweep up
 afterwards. The box picker is searchable by number, name and location, because by then
 there will be dozens of boxes and scrolling a list is not an answer.
+
+**The picker searches in the browser, not on the server.** It loads the boxes when it
+opens, following `next_cursor` until it has them all, and filters that set in memory.
+Following the cursor matters: a single capped request would leave box 201 quietly
+unfindable, with no error and no symptom beyond being unable to file anything into it.
+
+The reason is arithmetic. A box is roughly 200 bytes of JSON, so the whole collection is
+tens of kilobytes, less than one thumbnail. Against that, a debounce plus a round trip
+per pause in typing buys nothing and costs exactly the responsiveness this screen exists
+for. The debounce requirement above applies to item search, not here. The cost is
+staleness: a box created elsewhere is missing until the picker is reopened, which is a
+small window and a mild failure.
+
+**The box list screen is the opposite case**, and does use `q` with cursor pagination
+(§6.2). It renders a card per box and is meant to be scrolled, so it has no reason to
+hold everything at once. Same endpoint, two consumers, and the difference is deliberate
+rather than an inconsistency to tidy away.
 
 #### "Pack a box": bulk entry
 

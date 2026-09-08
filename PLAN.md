@@ -286,7 +286,8 @@ stays fixed throughout and that entry speed is not gated on the server round tri
 ### Step 3.5: Add item
 
 Deliverable: the phone flow of §8. Title, searchable box picker (by number, name and
-location), tag autocomplete, photo taken inline with
+location, loaded in full on open and filtered in the browser, not via `q`), tag
+autocomplete, photo taken inline with
 `<input type="file" accept="image/*" capture="environment">`, background upload with a
 visible progress indicator, no client-side downscaling.
 
