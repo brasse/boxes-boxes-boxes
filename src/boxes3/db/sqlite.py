@@ -88,7 +88,10 @@ class SqliteInventoryDatabase(InventoryDatabase):
 
     # Boxes
 
-    def create_box(self, user_id: int, box: NewBox) -> Box:
+    def create_box(self, username: str, box: NewBox) -> Box:
+        with self.engine.connect() as connection:
+            user_id = self._user_id(connection, username)
+
         statement = (
             insert(boxes)
             .values(
@@ -109,13 +112,13 @@ class SqliteInventoryDatabase(InventoryDatabase):
             raise _box_conflict(error, box.number) from error
         return Box.model_validate(row)
 
-    def get_box(self, user_id: int, box_id: str) -> Box:
+    def get_box(self, username: str, box_id: str) -> Box:
         with self.engine.connect() as connection:
-            return self._get_box(connection, user_id, box_id)
+            return self._get_box(connection, username, box_id)
 
     def list_boxes(
         self,
-        user_id: int,
+        username: str,
         *,
         q: str | None = None,
         limit: int = 50,
@@ -124,12 +127,12 @@ class SqliteInventoryDatabase(InventoryDatabase):
         limit = max(1, min(limit, MAX_LIMIT))
         after = _decode_cursor(cursor)
 
-        matching = _box_filter(user_id, q)
-        page = _box_select().where(*matching).order_by(boxes.c.number)
-        if after is not None:
-            page = page.where(boxes.c.number > after)
-
         with self.engine.connect() as connection:
+            matching = _box_filter(self._user_id(connection, username), q)
+            page = _box_select().where(*matching).order_by(boxes.c.number)
+            if after is not None:
+                page = page.where(boxes.c.number > after)
+
             rows = connection.execute(page.limit(limit + 1)).mappings().all()
             total = connection.execute(
                 select(func.count()).select_from(boxes).where(*matching)
@@ -139,7 +142,7 @@ class SqliteInventoryDatabase(InventoryDatabase):
         next_cursor = _encode_cursor(entries[-1].number) if len(rows) > limit else None
         return Page(entries=entries, total=total, next_cursor=next_cursor)
 
-    def update_box(self, user_id: int, box_id: str, changes: BoxUpdate) -> Box:
+    def update_box(self, username: str, box_id: str, changes: BoxUpdate) -> Box:
         # exclude_unset, so an omitted field stays as it is while an explicit null
         # clears an optional one (§6.2).
         values = changes.model_dump(exclude_unset=True)
@@ -147,7 +150,7 @@ class SqliteInventoryDatabase(InventoryDatabase):
             raise ValueError("number cannot be cleared")
 
         with self.engine.begin() as connection:
-            box = self._get_box(connection, user_id, box_id)
+            box = self._get_box(connection, username, box_id)
             if not values:
                 return box
 
@@ -164,9 +167,9 @@ class SqliteInventoryDatabase(InventoryDatabase):
 
         return Box.model_validate({**dict(row), "item_count": box.item_count})
 
-    def delete_box(self, user_id: int, box_id: str, *, force: bool = False) -> None:
+    def delete_box(self, username: str, box_id: str, *, force: bool = False) -> None:
         with self.engine.begin() as connection:
-            box = self._get_box(connection, user_id, box_id)
+            box = self._get_box(connection, username, box_id)
             if box.item_count and not force:
                 raise BoxNotEmptyError(box.item_count)
 
@@ -177,15 +180,22 @@ class SqliteInventoryDatabase(InventoryDatabase):
             connection.execute(delete(items).where(items.c.box_id == box.id))
             connection.execute(delete(boxes).where(boxes.c.id == box.id))
 
-    def next_box_number(self, user_id: int) -> int:
-        statement = (
-            select(boxes.c.number)
-            .where(boxes.c.user_id == user_id)
-            .order_by(boxes.c.number)
-        )
+    def next_box_number(self, username: str) -> int:
         with self.engine.connect() as connection:
+            statement = (
+                select(boxes.c.number)
+                .where(boxes.c.user_id == self._user_id(connection, username))
+                .order_by(boxes.c.number)
+            )
             used = connection.execute(statement).scalars().all()
 
+        # The lowest unused number, which is the first gap and not one past the end:
+        # [1, 2, 4] gives 3, and [2, 3] gives 1. Walking a sorted list in lockstep with
+        # a counter finds it, because the nth smallest number should be n and the first
+        # place that fails is free. Reaching the end without a mismatch means the
+        # numbers were exactly 1..len(used), so the answer is the next one up.
+        #
+        # Sorted by the query, distinct by UNIQUE (user_id, number).
         expected = 1
         for number in used:
             if number != expected:
@@ -193,28 +203,42 @@ class SqliteInventoryDatabase(InventoryDatabase):
             expected += 1
         return expected
 
-    def box_locations(self, user_id: int) -> list[str]:
-        statement = (
-            select(boxes.c.location)
-            .where(
-                boxes.c.user_id == user_id,
-                boxes.c.location.is_not(None),
-                func.trim(boxes.c.location) != "",
-            )
-            .distinct()
-            .order_by(boxes.c.location)
-        )
+    def box_locations(self, username: str) -> list[str]:
         with self.engine.connect() as connection:
+            statement = (
+                select(boxes.c.location)
+                .where(
+                    boxes.c.user_id == self._user_id(connection, username),
+                    boxes.c.location.is_not(None),
+                    func.trim(boxes.c.location) != "",
+                )
+                .distinct()
+                .order_by(boxes.c.location)
+            )
             return list(connection.execute(statement).scalars().all())
 
-    def _get_box(self, connection: Connection, user_id: int, box_id: str) -> Box:
+    def _get_box(self, connection: Connection, username: str, box_id: str) -> Box:
         statement = _box_select().where(
-            boxes.c.user_id == user_id, boxes.c.public_id == box_id
+            boxes.c.user_id == self._user_id(connection, username),
+            boxes.c.public_id == box_id,
         )
         row = connection.execute(statement).mappings().first()
         if row is None:
             raise BoxNotFoundError(box_id)
         return Box.model_validate(row)
+
+    def _user_id(self, connection: Connection, username: str) -> int:
+        """
+        The one place an external identifier becomes an internal key.
+
+        An extra lookup on a unique index over a table with one row, which costs
+        nothing and keeps the integer from ever leaving this module (§6.0).
+        """
+        statement = select(users.c.id).where(users.c.username == username)
+        user_id = connection.execute(statement).scalar_one_or_none()
+        if user_id is None:
+            raise UserNotFoundError(username)
+        return user_id
 
 
 def _now() -> str:

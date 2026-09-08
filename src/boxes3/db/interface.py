@@ -4,8 +4,10 @@ Raising domain exceptions rather than leaking driver errors is half of what keep
 backend swappable. The other half is that no SQL exists outside an implementation of
 this class.
 
-`box_id` arguments are always a box's **public** id. Resolving one to an internal key
-happens inside the implementation and nowhere else (§6.0).
+**Every identifier here is an external one**: `username` for the owner, `public_id` for
+everything else. Internal integer keys do not appear in this interface and therefore
+cannot reach a router, a log line or an error message. Resolving an external identifier
+to an internal key happens inside the implementation and nowhere else (§6.0, §7.4).
 """
 
 from abc import ABC, abstractmethod
@@ -48,15 +50,15 @@ class InventoryDatabase(ABC):
     def set_password(self, username: str, password_hash: str) -> User: ...
 
     @abstractmethod
-    def create_box(self, user_id: int, box: NewBox) -> Box: ...
+    def create_box(self, username: str, box: NewBox) -> Box: ...
 
     @abstractmethod
-    def get_box(self, user_id: int, box_id: str) -> Box: ...
+    def get_box(self, username: str, box_id: str) -> Box: ...
 
     @abstractmethod
     def list_boxes(
         self,
-        user_id: int,
+        username: str,
         *,
         q: str | None = None,
         limit: int = 50,
@@ -68,21 +70,21 @@ class InventoryDatabase(ABC):
         """
 
     @abstractmethod
-    def update_box(self, user_id: int, box_id: str, changes: BoxUpdate) -> Box: ...
+    def update_box(self, username: str, box_id: str, changes: BoxUpdate) -> Box: ...
 
     @abstractmethod
-    def delete_box(self, user_id: int, box_id: str, *, force: bool = False) -> None:
+    def delete_box(self, username: str, box_id: str, *, force: bool = False) -> None:
         """
         Raises `BoxNotEmptyError` unless `force`, in which case the box and everything
         in it go in one transaction (§6.2).
         """
 
     @abstractmethod
-    def next_box_number(self, user_id: int) -> int:
+    def next_box_number(self, username: str) -> int:
         """
         The lowest unused positive integer. A suggestion, not a reservation (§6.2).
         """
 
     @abstractmethod
-    def box_locations(self, user_id: int) -> list[str]:
+    def box_locations(self, username: str) -> list[str]:
         """Distinct non-empty locations already in use, for autocomplete (§6.2)."""
