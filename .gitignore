@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state: the database, image blobs, and config.toml, which holds the
+# session signing key and the backup token (§9). Never committed.
+data/

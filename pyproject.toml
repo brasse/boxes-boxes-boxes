@@ -1,0 +1,45 @@
+[project]
+name = "boxes3"
+version = "0.1.0"
+description = "Track which numbered box a thing is stored in."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.125.0",
+    "sqlalchemy>=2.0.45",
+    "alembic>=1.14",        # migrations (§7.5)
+    "pillow>=11",           # image variants (§4)
+    "pillow-heif>=0.21",    # HEIC decoding, iPhones shoot it by default
+    "pylib",
+]
+
+[tool.uv.sources]
+pylib = { git = "https://github.com/brasse/pylib", tag = "v0.1.0" }
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ANN", "FAST"]
+ignore = ["ANN401"]
+per-file-ignores = { "tests/**.py" = ["ANN"] }
+
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.14.10",
+]
