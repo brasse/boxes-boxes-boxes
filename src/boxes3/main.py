@@ -5,8 +5,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy import Engine
 
 from boxes3.config import Config
+from boxes3.db.engine import create_engine
+from boxes3.db.migrations import upgrade_to_head
 
 
 def configure() -> Config:
@@ -38,9 +41,19 @@ def create_directories(config: Config) -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
+def start_database(config: Config) -> Engine:
+    """Open the database and bring it to the newest revision (§7.5)."""
+    engine = create_engine(config.database_path)
+    upgrade_to_head(engine)
+    return engine
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    app.state.config = configure()
+    config = configure()
+
+    app.state.config = config
+    app.state.engine = start_database(config)
     yield
 
 

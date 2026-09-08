@@ -42,7 +42,7 @@ uv run pytest          # tests
 uv run ruff check .    # lint
 uv run ruff format .   # format
 uv run basedpyright    # type check
-uv run alembic upgrade head
+uv run alembic upgrade head    # the app does this itself on startup
 ```
 
 Frontend (once it exists), from `frontend/`:

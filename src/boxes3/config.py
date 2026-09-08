@@ -96,6 +96,10 @@ class Config:
         return self.data_dir / CONFIG_FILENAME
 
     @property
+    def database_path(self) -> Path:
+        return self.data_dir / "inventory.db"
+
+    @property
     def blobs_dir(self) -> Path:
         return self.data_dir / "blobs"
 
