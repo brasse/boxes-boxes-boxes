@@ -48,7 +48,7 @@ id replaces it cleanly rather than truncating in place; no stray temp files surv
 successful write; a failed write leaves the previous blob intact.
 
 Verify:
-- `uv run pytest && uv run ruff check .` is clean.
+- `uv run pytest && uv run ruff check . && uv run basedpyright` is clean.
 - The partial-read test genuinely fails if you revert `put` to `path.write_bytes`.
   I will demonstrate this rather than assert it.
 
@@ -87,7 +87,7 @@ Verify:
 - `SECRET_KEY=x uv run ...` wins over the file.
 - `Config.load()` on a fresh data directory creates nothing at all.
 - `git status` is clean after a run, i.e. `data/` is ignored.
-- `uv run pytest && uv run ruff check .` is clean.
+- `uv run pytest && uv run ruff check . && uv run basedpyright` is clean.
 
 ### Step 1.2: Schema, pragmas, Alembic
 
@@ -120,7 +120,7 @@ Verify:
   correctly, `q` matches number/name/location, ordering by `number` ascending,
   pagination walks a >50-row set exactly once with no duplicates or gaps,
   delete-non-empty raises, forced delete removes items in one transaction.
-- `uv run pytest && uv run ruff check .` is clean.
+- `uv run pytest && uv run ruff check . && uv run basedpyright` is clean.
 
 ### Step 1.4: Items in the database layer
 

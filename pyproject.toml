@@ -37,8 +37,17 @@ per-file-ignores = { "tests/**.py" = ["ANN"] }
 [tool.ruff.lint.flake8-annotations]
 mypy-init-return = true
 
+[tool.basedpyright]
+include = ["src", "tests"]
+# Standard rather than basedpyright's stricter default, which mostly complains that
+# pytest's own fixtures are untyped. reportDeprecated is off by default in Pyright and
+# is the one rule worth turning up: it is what catches a deprecated typeshed overload.
+typeCheckingMode = "standard"
+reportDeprecated = "error"
+
 [dependency-groups]
 dev = [
+    "basedpyright>=1.40.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "ruff>=0.14.10",

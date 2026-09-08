@@ -39,8 +39,9 @@ uv run fastapi dev src/boxes3/main.py   # run it (no config needed on a
                                               # an app under src/<package>/ on
                                               # its own, so the path is required)
 uv run pytest          # tests
-uv run ruff check .    # lint, the quality gate
+uv run ruff check .    # lint
 uv run ruff format .   # format
+uv run basedpyright    # type check
 uv run alembic upgrade head
 ```
 
@@ -54,8 +55,10 @@ make types             # regenerate API types from the running app's /openapi.js
 
 ## Conventions
 
-Ruff is the quality gate: rules `E,F,I,B,UP,ANN,FAST`, with `ANN` relaxed for tests.
-No separate type checker: `ANN` forces annotations and Pydantic validates at runtime.
+Ruff and basedpyright are the quality gate. Ruff runs `E,F,I,B,UP,ANN,FAST` with `ANN`
+relaxed for tests, which checks that annotations exist. basedpyright checks that they are
+right, in `standard` mode with `reportDeprecated` raised to an error. It is the same
+engine as Pylance, so the editor and CI agree.
 
 **Tests ship with the code they test, in the same change** (§10). Not deferred to a later
 pass, not offered afterwards. A step that adds behaviour and no test is unfinished.

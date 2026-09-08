@@ -1525,15 +1525,27 @@ afterwards, and the tests then never carry the same weight.
 uv run pytest          # tests
 uv run ruff check .    # lint
 uv run ruff format .   # format
+uv run basedpyright    # types
 ```
 
-**Ruff is the quality gate**, configured as in `no-more-paper-2` (§12): rules
-`E,F,I,B,UP,ANN,FAST`, with `ANN` relaxed for the test suite. No separate type checker:
-`ANN` already forces annotations, FastAPI and Pydantic validate at runtime, and mypy against
-SQLAlchemy Core produces more noise than signal at this size.
+**Ruff and basedpyright are the quality gate.** Ruff is configured as in
+`no-more-paper-2` (§12): rules `E,F,I,B,UP,ANN,FAST`, with `ANN` relaxed for the test
+suite.
 
-**CI: GitHub Actions**, on push and pull request, for **both** repositories. One job: install
-with `uv`, run ruff, run pytest.
+Ruff's `ANN` rules check that an annotation *exists*, never that it is right, so they
+need a type checker behind them to be worth anything. Pydantic does not fill that gap
+either: it validates data at the edges at runtime and says nothing about whether the code
+is internally consistent.
+
+**basedpyright rather than mypy, for one reason: it is the same engine as Pylance**, so
+the editor and CI give the same answer instead of arguing. It also ships a current
+typeshed with every release, where mypy vendors an older snapshot; that difference is not
+academic, and it is why `reportDeprecated` is turned up to an error here. Everything else
+stays at `standard`, because basedpyright's stricter default mostly objects that pytest's
+own fixtures are untyped.
+
+**CI: GitHub Actions**, on push and pull request, for **both** repositories. One job:
+install with `uv`, run ruff, run basedpyright, run pytest.
 
 The `pylib` half is the part that earns its keep. `boxes3` pins a `pylib` git tag
 (§2.3), so a tag pushed with a broken build becomes *this* project's problem at the next
